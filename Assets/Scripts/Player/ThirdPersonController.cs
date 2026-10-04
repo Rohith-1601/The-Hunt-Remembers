@@ -5,7 +5,6 @@ public class ThirdPersonController : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private CameraOrbit cameraOrbit;
-    [SerializeField] private Transform cameraPivot;
 
     [Header("Movement")]
     [SerializeField] private float walkSpeed = 3.5f;
@@ -16,8 +15,6 @@ public class ThirdPersonController : MonoBehaviour
     [Header("Crouch")]
     [SerializeField] private float standingHeight = 2f;
     [SerializeField] private float crouchingHeight = 1.2f;
-    [SerializeField] private float standingCameraHeight = 1.6f;
-    [SerializeField] private float crouchingCameraHeight = 1f;
 
     [Header("Gravity")]
     [SerializeField] private float gravity = -20f;
@@ -26,29 +23,21 @@ public class ThirdPersonController : MonoBehaviour
 
     private float verticalVelocity;
 
+    // Public values used by other systems:
+    // PlayerAnimation, PlayerNoiseEmitter, PlayerLeap, etc.
     public float CurrentSpeed { get; private set; }
     public bool IsSprinting { get; private set; }
     public bool IsCrouching { get; private set; }
 
     private void Awake()
     {
-        characterController = GetComponent<CharacterController>();
+        characterController =
+            GetComponent<CharacterController>();
 
         if (cameraOrbit == null)
         {
             Debug.LogError(
                 "ThirdPersonController: CameraOrbit reference is missing.",
-                this
-            );
-
-            enabled = false;
-            return;
-        }
-
-        if (cameraPivot == null)
-        {
-            Debug.LogError(
-                "ThirdPersonController: Camera Pivot reference is missing.",
                 this
             );
 
@@ -72,72 +61,113 @@ public class ThirdPersonController : MonoBehaviour
 
     private void HandleMovement()
     {
-        float horizontal = Input.GetAxisRaw("Horizontal");
-        float vertical = Input.GetAxisRaw("Vertical");
+        float horizontal =
+            Input.GetAxisRaw("Horizontal");
+
+        float vertical =
+            Input.GetAxisRaw("Vertical");
 
         Vector3 inputDirection =
-            new Vector3(horizontal, 0f, vertical);
+            new Vector3(
+                horizontal,
+                0f,
+                vertical
+            );
 
-        // Prevent faster diagonal movement.
+        // Prevent diagonal movement from being faster.
         inputDirection =
-            Vector3.ClampMagnitude(inputDirection, 1f);
+            Vector3.ClampMagnitude(
+                inputDirection,
+                1f
+            );
 
         bool hasMovementInput =
             inputDirection.sqrMagnitude > 0.01f;
 
-        // Preserve our camera-relative movement system.
-        float yaw = cameraOrbit.Yaw;
+        // IMPORTANT:
+        // Movement remains based on CameraOrbit WORLD yaw.
+        float yaw =
+            cameraOrbit.Yaw;
 
         Quaternion cameraRotation =
-            Quaternion.Euler(0f, yaw, 0f);
+            Quaternion.Euler(
+                0f,
+                yaw,
+                0f
+            );
 
         Vector3 moveDirection =
-            cameraRotation * inputDirection;
+            cameraRotation *
+            inputDirection;
 
-        // Sprint only while standing.
+        // =====================================================
+        // SPRINT
+        // =====================================================
+
+        // Sprint is only possible while standing.
         IsSprinting =
             Input.GetKey(KeyCode.LeftShift) &&
             hasMovementInput &&
             !IsCrouching;
 
+        // =====================================================
+        // SPEED
+        // =====================================================
+
         float targetSpeed;
 
         if (IsCrouching)
         {
-            targetSpeed = crouchSpeed;
+            targetSpeed =
+                crouchSpeed;
         }
         else if (IsSprinting)
         {
-            targetSpeed = sprintSpeed;
+            targetSpeed =
+                sprintSpeed;
         }
         else
         {
-            targetSpeed = walkSpeed;
+            targetSpeed =
+                walkSpeed;
         }
 
         CurrentSpeed =
-            hasMovementInput ? targetSpeed : 0f;
+            hasMovementInput
+                ? targetSpeed
+                : 0f;
 
-        // Rotate toward movement direction.
+        // =====================================================
+        // ROTATION
+        // =====================================================
+
         if (hasMovementInput)
         {
             Quaternion targetRotation =
-                Quaternion.LookRotation(moveDirection);
+                Quaternion.LookRotation(
+                    moveDirection
+                );
 
             transform.rotation =
                 Quaternion.Slerp(
                     transform.rotation,
                     targetRotation,
-                    rotationSpeed * Time.deltaTime
+                    rotationSpeed *
+                    Time.deltaTime
                 );
         }
 
-        // Move horizontally.
+        // =====================================================
+        // MOVE
+        // =====================================================
+
         Vector3 horizontalVelocity =
-            moveDirection * targetSpeed;
+            moveDirection *
+            targetSpeed;
 
         characterController.Move(
-            horizontalVelocity * Time.deltaTime
+            horizontalVelocity *
+            Time.deltaTime
         );
     }
 
@@ -154,14 +184,10 @@ public class ThirdPersonController : MonoBehaviour
         if (crouchPressed && !IsCrouching)
         {
             SetCrouchingState();
-
-            Debug.Log("CROUCH ON");
         }
         else if (!crouchPressed && IsCrouching)
         {
             SetStandingState();
-
-            Debug.Log("CROUCH OFF");
         }
     }
 
@@ -169,7 +195,6 @@ public class ThirdPersonController : MonoBehaviour
     {
         IsCrouching = true;
 
-        // Shrink the CharacterController only.
         characterController.height =
             crouchingHeight;
 
@@ -179,23 +204,12 @@ public class ThirdPersonController : MonoBehaviour
                 crouchingHeight * 0.5f,
                 0f
             );
-
-        // Lower camera.
-        Vector3 cameraPosition =
-            cameraPivot.localPosition;
-
-        cameraPosition.y =
-            crouchingCameraHeight;
-
-        cameraPivot.localPosition =
-            cameraPosition;
     }
 
     private void SetStandingState()
     {
         IsCrouching = false;
 
-        // Restore CharacterController.
         characterController.height =
             standingHeight;
 
@@ -205,16 +219,6 @@ public class ThirdPersonController : MonoBehaviour
                 standingHeight * 0.5f,
                 0f
             );
-
-        // Restore camera.
-        Vector3 cameraPosition =
-            cameraPivot.localPosition;
-
-        cameraPosition.y =
-            standingCameraHeight;
-
-        cameraPivot.localPosition =
-            cameraPosition;
     }
 
     // =========================================================
@@ -230,13 +234,16 @@ public class ThirdPersonController : MonoBehaviour
         }
 
         verticalVelocity +=
-            gravity * Time.deltaTime;
+            gravity *
+            Time.deltaTime;
 
         Vector3 gravityMovement =
-            Vector3.up * verticalVelocity;
+            Vector3.up *
+            verticalVelocity;
 
         characterController.Move(
-            gravityMovement * Time.deltaTime
+            gravityMovement *
+            Time.deltaTime
         );
     }
 }
