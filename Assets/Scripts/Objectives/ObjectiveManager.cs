@@ -11,6 +11,8 @@ public class ObjectiveManager : MonoBehaviour
         Escape
     }
 
+    public static ObjectiveManager Instance { get; private set; }
+
     [Header("Current Objective")]
     [SerializeField]
     private ObjectiveType currentObjective =
@@ -21,42 +23,61 @@ public class ObjectiveManager : MonoBehaviour
 
     public bool GameWon { get; private set; }
 
-    public static event Action<ObjectiveType>
-        OnObjectiveChanged;
+    public static event Action<ObjectiveType> OnObjectiveChanged;
 
-    public static event Action<ObjectiveType>
-        OnObjectiveCompleted;
+    public static event Action<ObjectiveType> OnObjectiveCompleted;
 
-    public static event Action
-        OnGameWon;
+    public static event Action OnGameWon;
+
+    private void Awake()
+    {
+        // Singleton setup
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Instance = this;
+    }
 
     private void Start()
     {
-        OnObjectiveChanged?.Invoke(
-            currentObjective
-        );
+        // Tell the HUD which objective is active at the start.
+        OnObjectiveChanged?.Invoke(currentObjective);
     }
 
-    public bool CanInteract(
-        ObjectiveType objective)
+    // =========================================================
+    // CHECK IF OBJECTIVE CAN BE COMPLETED
+    // =========================================================
+
+    public bool CanComplete(ObjectiveType objective)
     {
+        // Objective can only be completed when:
+        // 1. Game is not already won
+        // 2. The requested objective is the current objective
         return !GameWon &&
                objective == currentObjective;
     }
 
-    public void CompleteObjective(
-        ObjectiveType objective)
+    // =========================================================
+    // COMPLETE OBJECTIVE
+    // =========================================================
+
+    public void CompleteObjective(ObjectiveType objective)
     {
+        // Do nothing if game has already been won.
         if (GameWon)
             return;
 
+        // Do nothing if this is not the current objective.
         if (objective != currentObjective)
             return;
 
-        OnObjectiveCompleted?.Invoke(
-            objective
-        );
+        // Tell other systems that this objective was completed.
+        OnObjectiveCompleted?.Invoke(objective);
 
+        // Move to the next objective.
         switch (objective)
         {
             case ObjectiveType.RestorePower:
@@ -87,19 +108,20 @@ public class ObjectiveManager : MonoBehaviour
                 return;
         }
 
-        OnObjectiveChanged?.Invoke(
-            currentObjective
-        );
+        // Update the HUD.
+        OnObjectiveChanged?.Invoke(currentObjective);
     }
+
+    // =========================================================
+    // GAME WIN
+    // =========================================================
 
     private void WinGame()
     {
         GameWon = true;
 
-        OnGameWon?.Invoke();
+        Debug.Log("GAME WON!");
 
-        Debug.Log(
-            "GAME WON!"
-        );
+        OnGameWon?.Invoke();
     }
 }

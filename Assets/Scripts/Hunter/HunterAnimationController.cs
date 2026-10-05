@@ -66,13 +66,11 @@ public class HunterAnimationController : MonoBehaviour
         );
     }
 
-    public void PlayAttack()
+    public void PlayBite()
     {
         if (animator == null)
             return;
 
-        animator.SetTrigger(
-            AttackHash
-        );
+        animator.SetTrigger("Bite");
     }
 }

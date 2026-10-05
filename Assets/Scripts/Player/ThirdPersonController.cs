@@ -20,19 +20,15 @@ public class ThirdPersonController : MonoBehaviour
     [SerializeField] private float gravity = -20f;
 
     private CharacterController characterController;
-
     private float verticalVelocity;
 
-    // Public values used by other systems:
-    // PlayerAnimation, PlayerNoiseEmitter, PlayerLeap, etc.
     public float CurrentSpeed { get; private set; }
     public bool IsSprinting { get; private set; }
     public bool IsCrouching { get; private set; }
 
     private void Awake()
     {
-        characterController =
-            GetComponent<CharacterController>();
+        characterController = GetComponent<CharacterController>();
 
         if (cameraOrbit == null)
         {
@@ -55,10 +51,6 @@ public class ThirdPersonController : MonoBehaviour
         HandleGravity();
     }
 
-    // =========================================================
-    // MOVEMENT
-    // =========================================================
-
     private void HandleMovement()
     {
         float horizontal =
@@ -74,7 +66,6 @@ public class ThirdPersonController : MonoBehaviour
                 vertical
             );
 
-        // Prevent diagonal movement from being faster.
         inputDirection =
             Vector3.ClampMagnitude(
                 inputDirection,
@@ -84,10 +75,30 @@ public class ThirdPersonController : MonoBehaviour
         bool hasMovementInput =
             inputDirection.sqrMagnitude > 0.01f;
 
-        // IMPORTANT:
-        // Movement remains based on CameraOrbit WORLD yaw.
-        float yaw =
-            cameraOrbit.Yaw;
+        // -----------------------------------------------------
+        // CAMERA YAW
+        // -----------------------------------------------------
+
+        float yaw = cameraOrbit.Yaw;
+
+        // Protect against invalid rotation values.
+        if (float.IsNaN(yaw) ||
+            float.IsInfinity(yaw))
+        {
+            Debug.LogWarning(
+                "ThirdPersonController: Invalid Camera Yaw detected. " +
+                "Movement frame skipped."
+            );
+
+            CurrentSpeed = 0f;
+            IsSprinting = false;
+
+            return;
+        }
+
+        // -----------------------------------------------------
+        // CAMERA-RELATIVE MOVEMENT
+        // -----------------------------------------------------
 
         Quaternion cameraRotation =
             Quaternion.Euler(
@@ -97,39 +108,33 @@ public class ThirdPersonController : MonoBehaviour
             );
 
         Vector3 moveDirection =
-            cameraRotation *
-            inputDirection;
+            cameraRotation * inputDirection;
 
-        // =====================================================
-        // SPRINT
-        // =====================================================
+        // Protect against invalid or zero vectors.
+        if (hasMovementInput &&
+            moveDirection.sqrMagnitude > 0.0001f)
+        {
+            moveDirection.Normalize();
+        }
 
-        // Sprint is only possible while standing.
         IsSprinting =
             Input.GetKey(KeyCode.LeftShift) &&
             hasMovementInput &&
             !IsCrouching;
 
-        // =====================================================
-        // SPEED
-        // =====================================================
-
         float targetSpeed;
 
         if (IsCrouching)
         {
-            targetSpeed =
-                crouchSpeed;
+            targetSpeed = crouchSpeed;
         }
         else if (IsSprinting)
         {
-            targetSpeed =
-                sprintSpeed;
+            targetSpeed = sprintSpeed;
         }
         else
         {
-            targetSpeed =
-                walkSpeed;
+            targetSpeed = walkSpeed;
         }
 
         CurrentSpeed =
@@ -137,15 +142,17 @@ public class ThirdPersonController : MonoBehaviour
                 ? targetSpeed
                 : 0f;
 
-        // =====================================================
-        // ROTATION
-        // =====================================================
+        // -----------------------------------------------------
+        // PLAYER ROTATION
+        // -----------------------------------------------------
 
-        if (hasMovementInput)
+        if (hasMovementInput &&
+            moveDirection.sqrMagnitude > 0.0001f)
         {
             Quaternion targetRotation =
                 Quaternion.LookRotation(
-                    moveDirection
+                    moveDirection,
+                    Vector3.up
                 );
 
             transform.rotation =
@@ -157,9 +164,9 @@ public class ThirdPersonController : MonoBehaviour
                 );
         }
 
-        // =====================================================
-        // MOVE
-        // =====================================================
+        // -----------------------------------------------------
+        // HORIZONTAL MOVEMENT
+        // -----------------------------------------------------
 
         Vector3 horizontalVelocity =
             moveDirection *
@@ -171,21 +178,19 @@ public class ThirdPersonController : MonoBehaviour
         );
     }
 
-    // =========================================================
-    // CROUCH
-    // =========================================================
-
     private void HandleCrouch()
     {
         bool crouchPressed =
             Input.GetKey(KeyCode.LeftControl) ||
             Input.GetKey(KeyCode.RightControl);
 
-        if (crouchPressed && !IsCrouching)
+        if (crouchPressed &&
+            !IsCrouching)
         {
             SetCrouchingState();
         }
-        else if (!crouchPressed && IsCrouching)
+        else if (!crouchPressed &&
+                 IsCrouching)
         {
             SetStandingState();
         }
@@ -220,10 +225,6 @@ public class ThirdPersonController : MonoBehaviour
                 0f
             );
     }
-
-    // =========================================================
-    // GRAVITY
-    // =========================================================
 
     private void HandleGravity()
     {

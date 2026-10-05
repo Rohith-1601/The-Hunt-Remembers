@@ -44,27 +44,24 @@ public class CameraOrbit : MonoBehaviour
     [Header("Cursor")]
     [SerializeField] private bool lockCursorOnStart = true;
 
-    // Current camera rotation
     private float yaw;
     private float pitch;
 
-    // Target rotation
     private float targetYaw;
     private float targetPitch;
 
-    // SmoothDamp velocities
     private float yawVelocity;
     private float pitchVelocity;
 
-    // Pivot follow velocity
     private Vector3 pivotVelocity;
-
-    // Camera local position smoothing
     private Vector3 cameraLocalVelocity;
 
-    // FOV smoothing
     private float fovVelocity;
 
+    private bool reportedInvalidRotation;
+
+    // IMPORTANT:
+    // ThirdPersonController uses this for camera-relative movement.
     public float Yaw => yaw;
 
     private void Start()
@@ -91,14 +88,21 @@ public class CameraOrbit : MonoBehaviour
             return;
         }
 
-        // Initial rotation
-        yaw = player.eulerAngles.y;
-        targetYaw = yaw;
+        float startingYaw = player.eulerAngles.y;
+
+        if (!IsFinite(startingYaw))
+        {
+            startingYaw = 0f;
+        }
+
+        startingYaw = NormalizeYaw(startingYaw);
+
+        yaw = startingYaw;
+        targetYaw = startingYaw;
 
         pitch = 10f;
-        targetPitch = pitch;
+        targetPitch = 10f;
 
-        // Initial position
         transform.position =
             player.position +
             Vector3.up * standingHeight;
@@ -139,15 +143,38 @@ public class CameraOrbit : MonoBehaviour
             Input.GetAxis("Mouse Y") *
             mouseSensitivity;
 
+        // Protect against invalid input values.
+        if (!IsFinite(mouseX))
+            mouseX = 0f;
+
+        if (!IsFinite(mouseY))
+            mouseY = 0f;
+
         targetYaw += mouseX;
         targetPitch -= mouseY;
 
+        // Keep yaw inside a manageable range.
+        targetYaw =
+            NormalizeYaw(targetYaw);
+
+        // Clamp pitch.
         targetPitch =
             Mathf.Clamp(
                 targetPitch,
                 minPitch,
                 maxPitch
             );
+
+        // Final safety check.
+        if (!IsFinite(targetYaw))
+        {
+            targetYaw = yaw;
+        }
+
+        if (!IsFinite(targetPitch))
+        {
+            targetPitch = pitch;
+        }
     }
 
     // =========================================================
@@ -156,12 +183,48 @@ public class CameraOrbit : MonoBehaviour
 
     private void SmoothRotation()
     {
+        // Safety before SmoothDamp.
+        if (!IsFinite(yaw))
+        {
+            yaw = 0f;
+            yawVelocity = 0f;
+        }
+
+        if (!IsFinite(targetYaw))
+        {
+            targetYaw = yaw;
+        }
+
+        if (!IsFinite(pitch))
+        {
+            pitch = 10f;
+            pitchVelocity = 0f;
+        }
+
+        if (!IsFinite(targetPitch))
+        {
+            targetPitch = pitch;
+        }
+
+        targetYaw =
+            NormalizeYaw(targetYaw);
+
+        targetPitch =
+            Mathf.Clamp(
+                targetPitch,
+                minPitch,
+                maxPitch
+            );
+
         yaw =
             Mathf.SmoothDampAngle(
                 yaw,
                 targetYaw,
                 ref yawVelocity,
-                yawSmoothTime
+                Mathf.Max(
+                    yawSmoothTime,
+                    0.0001f
+                )
             );
 
         pitch =
@@ -169,17 +232,48 @@ public class CameraOrbit : MonoBehaviour
                 pitch,
                 targetPitch,
                 ref pitchVelocity,
-                pitchSmoothTime
+                Mathf.Max(
+                    pitchSmoothTime,
+                    0.0001f
+                )
+            );
+
+        // Final safety.
+        if (!IsFinite(yaw))
+        {
+            yaw = targetYaw;
+            yawVelocity = 0f;
+        }
+
+        if (!IsFinite(pitch))
+        {
+            pitch = targetPitch;
+            pitchVelocity = 0f;
+        }
+
+        yaw =
+            NormalizeYaw(yaw);
+
+        pitch =
+            Mathf.Clamp(
+                pitch,
+                minPitch,
+                maxPitch
             );
 
         // IMPORTANT:
         // Keep WORLD rotation.
-        transform.rotation =
+        Quaternion targetRotation =
             Quaternion.Euler(
                 pitch,
                 yaw,
                 0f
             );
+
+        transform.rotation =
+            targetRotation;
+
+        reportedInvalidRotation = false;
     }
 
     // =========================================================
@@ -202,12 +296,20 @@ public class CameraOrbit : MonoBehaviour
             player.position +
             Vector3.up * targetHeight;
 
+        if (!IsFiniteVector3(targetPosition))
+        {
+            return;
+        }
+
         transform.position =
             Vector3.SmoothDamp(
                 transform.position,
                 targetPosition,
                 ref pivotVelocity,
-                positionSmoothTime
+                Mathf.Max(
+                    positionSmoothTime,
+                    0.0001f
+                )
             );
     }
 
@@ -249,8 +351,11 @@ public class CameraOrbit : MonoBehaviour
         float distance =
             direction.magnitude;
 
-        if (distance <= 0.001f)
+        if (!IsFinite(distance) ||
+            distance <= 0.001f)
+        {
             return;
+        }
 
         direction.Normalize();
 
@@ -278,6 +383,12 @@ public class CameraOrbit : MonoBehaviour
             }
         }
 
+        if (!IsFinite(finalDistance))
+        {
+            finalDistance =
+                targetDistance;
+        }
+
         Vector3 targetCameraLocalPosition =
             new Vector3(
                 shoulderOffset,
@@ -290,7 +401,10 @@ public class CameraOrbit : MonoBehaviour
                 cameraTransform.localPosition,
                 targetCameraLocalPosition,
                 ref cameraLocalVelocity,
-                cameraPositionSmoothTime
+                Mathf.Max(
+                    cameraPositionSmoothTime,
+                    0.0001f
+                )
             );
     }
 
@@ -322,12 +436,24 @@ public class CameraOrbit : MonoBehaviour
                 sprintFOV;
         }
 
+        if (!IsFinite(
+                cameraComponent.fieldOfView))
+        {
+            cameraComponent.fieldOfView =
+                normalFOV;
+
+            fovVelocity = 0f;
+        }
+
         cameraComponent.fieldOfView =
             Mathf.SmoothDamp(
                 cameraComponent.fieldOfView,
                 targetFOV,
                 ref fovVelocity,
-                fovSmoothTime
+                Mathf.Max(
+                    fovSmoothTime,
+                    0.0001f
+                )
             );
     }
 
@@ -346,12 +472,48 @@ public class CameraOrbit : MonoBehaviour
             !locked;
     }
 
-    private void OnApplicationFocus(bool hasFocus)
+    private void OnApplicationFocus(
+        bool hasFocus)
     {
         if (hasFocus &&
             lockCursorOnStart)
         {
             SetCursorState(true);
         }
+    }
+
+    // =========================================================
+    // SAFETY HELPERS
+    // =========================================================
+
+    private static bool IsFinite(float value)
+    {
+        return !float.IsNaN(value) &&
+               !float.IsInfinity(value);
+    }
+
+    private static bool IsFiniteVector3(
+        Vector3 value)
+    {
+        return IsFinite(value.x) &&
+               IsFinite(value.y) &&
+               IsFinite(value.z);
+    }
+
+    private static float NormalizeYaw(
+        float value)
+    {
+        if (!IsFinite(value))
+            return 0f;
+
+        value %= 360f;
+
+        if (value > 180f)
+            value -= 360f;
+
+        if (value < -180f)
+            value += 360f;
+
+        return value;
     }
 }
