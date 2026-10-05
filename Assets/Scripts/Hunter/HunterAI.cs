@@ -41,7 +41,7 @@ public class HunterAI : MonoBehaviour
 
     private Vector3 investigationTarget;
 
-    private int currentPatrolIndex;
+    private int currentPatrolIndex = -1;
 
     private Coroutine searchCoroutine;
 
@@ -106,7 +106,7 @@ public class HunterAI : MonoBehaviour
         agent.speed = patrolSpeed;
         agent.isStopped = false;
 
-        SetNextPatrolPoint();
+        GoToNextPatrolPoint();
     }
 
     private void UpdatePatrol()
@@ -118,23 +118,23 @@ public class HunterAI : MonoBehaviour
         if (agent.pathPending)
             return;
 
-        if (agent.remainingDistance <=
-            patrolArrivalDistance)
+        if (agent.remainingDistance <= patrolArrivalDistance)
         {
-            SetNextPatrolPoint();
+            GoToNextPatrolPoint();
         }
     }
 
-    private void SetNextPatrolPoint()
+    private void GoToNextPatrolPoint()
     {
         if (patrolPoints.Length == 0)
             return;
 
-        currentPatrolIndex =
-            UnityEngine.Random.Range(
-                0,
-                patrolPoints.Length
-            );
+        currentPatrolIndex++;
+
+        if (currentPatrolIndex >= patrolPoints.Length)
+        {
+            currentPatrolIndex = 0;
+        }
 
         Transform target =
             patrolPoints[currentPatrolIndex];
@@ -142,9 +142,7 @@ public class HunterAI : MonoBehaviour
         if (target == null)
             return;
 
-        agent.SetDestination(
-            target.position
-        );
+        agent.SetDestination(target.position);
     }
 
     // =========================================================
@@ -157,11 +155,8 @@ public class HunterAI : MonoBehaviour
         if (noiseEvent.Source == gameObject)
             return;
 
-        if (Time.time <
-            nextAllowedHearingTime)
-        {
+        if (Time.time < nextAllowedHearingTime)
             return;
-        }
 
         float distance =
             Vector3.Distance(
@@ -173,19 +168,12 @@ public class HunterAI : MonoBehaviour
             baseHearingRange *
             noiseEvent.Loudness;
 
-        if (noiseEvent.Loudness <
-            minimumLoudness)
-        {
+        if (noiseEvent.Loudness < minimumLoudness)
             return;
-        }
 
-        if (distance >
-            hearingRange)
-        {
+        if (distance > hearingRange)
             return;
-        }
 
-        // We accepted the sound.
         nextAllowedHearingTime =
             Time.time +
             hearingRefreshCooldown;
@@ -219,7 +207,8 @@ public class HunterAI : MonoBehaviour
         agent.speed =
             investigationSpeed;
 
-        agent.isStopped = false;
+        agent.isStopped =
+            false;
 
         agent.SetDestination(
             investigationTarget
@@ -285,6 +274,16 @@ public class HunterAI : MonoBehaviour
 
         searchCoroutine = null;
 
-        StartPatrol();
+        // Return to regular route
+        state =
+            HunterState.Patrolling;
+
+        agent.speed =
+            patrolSpeed;
+
+        agent.isStopped =
+            false;
+
+        GoToNextPatrolPoint();
     }
 }
